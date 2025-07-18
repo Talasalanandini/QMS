@@ -22,9 +22,30 @@ class EmployeeInDB(EmployeeBase):
     class Config:
         orm_mode = True
 
+class EmployeeListItem(BaseModel):
+    id: int
+    full_name: str
+    email: EmailStr
+    role: str
+    department: str
+    class Config:
+        orm_mode = True
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
 class LoginResponse(BaseModel):
     message: str
+    access_token: str
+    expires_at: str
+
+class TokenSchema(BaseModel):
+    id: int
+    user_id: int
+    token: str
+    expires_at: str
+    created_at: str
+    revoked: int
+    class Config:
+        orm_mode = True

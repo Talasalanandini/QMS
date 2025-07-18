@@ -56,3 +56,27 @@ class Employee(Base):
     password = Column(String, nullable=False)
     department_obj = relationship("Department", back_populates="employees")
     role_obj = relationship("Role", back_populates="employees")
+
+class Token(Base):
+    __tablename__ = 'tokens'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('employees.id'), nullable=False)
+    token = Column(String, unique=True, nullable=False)
+    expires_at = Column(String, nullable=False)
+    created_at = Column(String, nullable=False)
+    revoked = Column(Integer, default=0)  # 0 = not revoked, 1 = revoked
+
+class LoginResponse(BaseModel):
+    message: str
+    access_token: str
+    expires_at: str
+
+class EmployeeListItem(BaseModel):
+    id: int
+    full_name: str
+    email: EmailStr
+    role: str
+    department: str
+
+    class Config:
+        orm_mode = True
