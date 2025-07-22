@@ -1,17 +1,17 @@
-from fastapi import APIRouter, HTTPException, Depends, Header, Request, Query
+from fastapi import APIRouter, HTTPException, Depends, Header, Request, Query, Path, Body
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from schemas import EmployeeCreate, EmployeeResponse, LoginRequest, LoginResponse
+from schemas import EmployeeCreate, EmployeeResponse, LoginRequest, LoginResponse, PasswordChangeSchema
 from services.employeeserice import create_employee
 import secrets
 from passlib.hash import bcrypt
 from sqlalchemy.orm import Session
 from db.database import SessionLocal
-from models import Employee, Role, Token, Department
+from models import Employee, Role, Token, Department, LoginLog
 import datetime
 from schemas import EmployeeListItem
 from typing import Optional, List
 
-router = APIRouter()
+router = APIRouter(tags=["Employee Management"])
 security = HTTPBasic()
 
 # Token-based admin authentication
@@ -37,29 +37,30 @@ def admin_auth(request: Request):
         admin_role = session.query(Role).filter(Role.name == "Admin").first()
         if admin_role is None:
             raise HTTPException(status_code=403, detail="Admin role not found")
-        if employee.role_id != admin_role.id:
+        if getattr(employee, 'role_id', None) != getattr(admin_role, 'id', None):
             raise HTTPException(status_code=403, detail="Not an admin user")
         return employee.email
     finally:
         session.close()
 
-@router.post('/login', response_model=LoginResponse)
+@router.post('/login', response_model=LoginResponse, summary="Login")
 def admin_login(login: LoginRequest):
     session: Session = SessionLocal()
     try:
-        # Find employee by email
         employee = session.query(Employee).filter(Employee.email == login.email).first()
         if employee is None:
             raise HTTPException(status_code=401, detail="Invalid credentials")
-        # Check if employee is admin
-        admin_role = session.query(Role).filter(Role.name == "Admin").first()
-        if admin_role is None or employee.role_id != admin_role.id:
-            raise HTTPException(status_code=403, detail="Not an admin user")
-        # Verify password
+        # Remove admin-only check to allow all employees to log in
         if not bcrypt.verify(login.password, getattr(employee, 'password')):
             raise HTTPException(status_code=401, detail="Invalid credentials")
-        # Generate access token
-        access_token = secrets.token_urlsafe(32)
+        # Store login log for all employees
+        log = LoginLog(
+            user_id=employee.id,
+            login_time=datetime.datetime.utcnow()
+        )
+        session.add(log)
+        # Generate access token, etc.
+        access_token = secrets.token_urlsafe(64)
         now = datetime.datetime.utcnow()
         expires_at = now + datetime.timedelta(hours=1)
         token_obj = Token(
@@ -75,13 +76,10 @@ def admin_login(login: LoginRequest):
     finally:
         session.close()
 
-@router.post('/employees', response_model=EmployeeResponse)
+@router.post('/employees')
 def create_employee_api(employee: EmployeeCreate, username: str = Depends(admin_auth)):
     try:
-        employee_obj, password = create_employee(employee.dict())
-        # Return password in response for demo/testing
-        response = employee_obj.__dict__.copy()
-        response['password'] = password
+        response, _ = create_employee(employee.dict())
         return response
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -123,6 +121,69 @@ def get_employee_count(username: str = Depends(admin_auth)):
     try:
         count = session.query(Employee).count()
         return {"count": count}
+    finally:
+        session.close()
+
+@router.get('/employees/{employee_id}', response_model=EmployeeResponse)
+def get_employee(employee_id: int, username: str = Depends(admin_auth)):
+    session: Session = SessionLocal()
+    try:
+        employee = session.query(Employee).filter(Employee.id == employee_id).first()
+        if not employee:
+            raise HTTPException(status_code=404, detail="Employee not found")
+        return employee
+    finally:
+        session.close()
+
+@router.put('/employees/{employee_id}', response_model=EmployeeResponse)
+def update_employee(employee_id: int, employee_update: EmployeeCreate, username: str = Depends(admin_auth)):
+    session: Session = SessionLocal()
+    try:
+        employee = session.query(Employee).filter(Employee.id == employee_id).first()
+        if not employee:
+            raise HTTPException(status_code=404, detail="Employee not found")
+        # Update fields
+        setattr(employee, "full_name", employee_update.full_name)
+        setattr(employee, "email", str(employee_update.email))
+        setattr(employee, "phone", employee_update.phone)
+        setattr(employee, "department_id", employee_update.department_id)
+        setattr(employee, "role_id", employee_update.role_id)
+        session.commit()
+        session.refresh(employee)
+        return employee
+    finally:
+        session.close()
+
+@router.post('/logout', summary="Logout")
+def logout(username: str = Depends(admin_auth)):
+    session: Session = SessionLocal()
+    try:
+        employee = session.query(Employee).filter(Employee.email == username).first()
+        if not employee:
+            raise HTTPException(status_code=404, detail="User not found")
+        login_log = session.query(LoginLog).filter(
+            LoginLog.user_id == employee.id,
+            LoginLog.logout_time == None
+        ).order_by(LoginLog.login_time.desc()).first()
+        if login_log:
+            setattr(login_log, 'logout_time', datetime.datetime.utcnow())
+            session.commit()
+            return {"message": "Logout successful"}
+        else:
+            raise HTTPException(status_code=400, detail="No active login session found")
+    finally:
+        session.close()
+
+@router.post('/employees/{employee_id}/change-password', summary="Admin change user password")
+def admin_change_user_password(employee_id: int, new_password: str = Body(...), username: str = Depends(admin_auth)):
+    session = SessionLocal()
+    try:
+        user = session.query(Employee).filter(Employee.id == employee_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        setattr(user, 'password', bcrypt.hash(new_password))
+        session.commit()
+        return {"message": "Password changed by admin successfully"}
     finally:
         session.close()
 

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from typing import Optional, Literal
 
 class EmployeeBase(BaseModel):
     full_name: str
@@ -49,3 +49,40 @@ class TokenSchema(BaseModel):
     revoked: int
     class Config:
         orm_mode = True
+
+class ProfileUpdateSchema(BaseModel):
+    full_name: Optional[str]
+    phone: Optional[str]
+    status: Optional[str]
+
+class PasswordChangeSchema(BaseModel):
+    old_password: str
+    new_password: str
+
+class SignatureSchema(BaseModel):
+    signature: str  # base64 string or file path
+
+class FirstPasswordResetSchema(BaseModel):
+    email: EmailStr
+    old_password: str
+    new_password: str
+
+class AuditCreateSchema(BaseModel):
+    title: str
+    type: Literal['Internal', 'External', 'Compliance', 'Regulatory', 'Financial']
+    status: str = 'Scheduled'
+    scheduled_date: str | None = None
+    lead_auditor_id: int | None = None
+    scope: str | None = None
+
+class AuditEditSchema(BaseModel):
+    title: Optional[str] = None
+    type: Optional[Literal['Internal', 'External', 'Compliance', 'Regulatory', 'Financial']] = None
+    status: Optional[str] = None
+    scheduled_date: Optional[str] = None
+    lead_auditor_id: Optional[int] = None
+    scope: Optional[str] = None
+
+class FeedbackCreateSchema(BaseModel):
+    audit_id: int
+    feedback: str

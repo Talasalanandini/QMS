@@ -7,6 +7,7 @@ from db.database import SessionLocal
 from models import Employee
 from sqlalchemy.exc import IntegrityError
 from passlib.hash import bcrypt
+from models import Department, Role
 
 # Load SMTP credentials from environment variables
 SMTP_SERVER = os.getenv('SMTP_SERVER')
@@ -52,7 +53,25 @@ def create_employee(employee_data):
         email_body = f"Welcome! Your login email: {employee.email}\nPassword: {password}"
         send_email(employee.email, "Your QMS Login Credentials", email_body)
         # Return employee and password for API response
-        return employee, password
+        department_name = None
+        role_name = None
+        if employee.department_id:
+            department = session.query(Department).filter(Department.id == employee.department_id).first()
+            if department:
+                department_name = department.name
+        if employee.role_id:
+            role = session.query(Role).filter(Role.id == employee.role_id).first()
+            if role:
+                role_name = role.name
+        return {
+            "id": employee.id,
+            "full_name": employee.full_name,
+            "email": employee.email,
+            "phone": employee.phone,
+            "department": department_name,
+            "role": role_name,
+            "password": password
+        }, password
     except IntegrityError:
         session.rollback()
         raise ValueError('Employee with this email already exists')
