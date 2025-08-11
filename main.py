@@ -1,16 +1,18 @@
 from fastapi import FastAPI
 from api import employeemanagement
-from startup import ensure_admin_user
 from dotenv import load_dotenv
 from fastapi.openapi.utils import get_openapi
 from fastapi import APIRouter
 import datetime
 from api.profilemanagemet import router as profile_router
 from api.auditmanagement import router as audit_router
+from api.companymanagement import router as company_router
+from api.documentmanagement import router as document_router
+from api.trainingmanagement import router as training_router
+from api.usermanagement import router as user_router
+from api.projectmanagement import router as project_router
 
 load_dotenv()
-
-ensure_admin_user()
 
 app = FastAPI()
 
@@ -39,7 +41,7 @@ def custom_openapi():
                 method["security"] = [{"BearerAuth": []}]
             elif path.startswith("/profile"):
                 method["security"] = []
-            elif not (path == "/login" and method.get("operationId", "").startswith("admin_login")):
+            elif not (path == "/login" and method.get("operationId", "").startswith("user_login")):
                 method["security"] = [{"BearerAuth": []}]
             else:
                 method["security"] = []
@@ -49,5 +51,10 @@ def custom_openapi():
 app.openapi = custom_openapi
 
 app.include_router(employeemanagement.router)
+app.include_router(user_router)
 app.include_router(profile_router)
 app.include_router(audit_router)
+app.include_router(company_router)
+app.include_router(document_router)
+app.include_router(training_router)
+app.include_router(project_router)

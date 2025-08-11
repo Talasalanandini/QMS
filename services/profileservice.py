@@ -42,21 +42,22 @@ def save_signature(signature_data):
 
 def upload_avatar(file, current_user):
     import os
-    from db.database import SessionLocal
     uploads_dir = 'uploads'
     os.makedirs(uploads_dir, exist_ok=True)
     file_location = os.path.join(uploads_dir, file.filename)
     with open(file_location, "wb") as f:
         f.write(file.file.read())
-    # Update the user's avatar_url in the database
-    session = SessionLocal()
-    try:
-        user = session.query(Employee).filter(Employee.id == current_user.id).first()
-        if user:
-            user.avatar_url = file_location
-            session.commit()
-    finally:
-        session.close()
+    # Only update the user's avatar_url in the database if current_user is not None
+    if current_user is not None:
+        from db.database import SessionLocal
+        session = SessionLocal()
+        try:
+            user = session.query(Employee).filter(Employee.id == current_user.id).first()
+            if user:
+                user.avatar_url = file_location
+                session.commit()
+        finally:
+            session.close()
     return {"message": "Avatar uploaded successfully", "file_path": file_location}
 
 

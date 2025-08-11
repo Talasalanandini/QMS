@@ -1,5 +1,6 @@
-from pydantic import BaseModel, EmailStr
-from typing import Optional, Literal
+from enum import Enum
+from pydantic import BaseModel, EmailStr, field_validator
+from typing import Optional, Literal, Dict, List, Any
 
 class EmployeeBase(BaseModel):
     full_name: str
@@ -14,13 +15,13 @@ class EmployeeCreate(EmployeeBase):
 class EmployeeResponse(EmployeeBase):
     id: int
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class EmployeeInDB(EmployeeBase):
     id: int
     password: str  # For internal use only
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class EmployeeListItem(BaseModel):
     id: int
@@ -29,7 +30,7 @@ class EmployeeListItem(BaseModel):
     role: str
     department: str
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -48,7 +49,7 @@ class TokenSchema(BaseModel):
     created_at: str
     revoked: int
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class ProfileUpdateSchema(BaseModel):
     full_name: Optional[str]
@@ -83,6 +84,668 @@ class AuditEditSchema(BaseModel):
     lead_auditor_id: Optional[int] = None
     scope: Optional[str] = None
 
+class AuditScheduleSchema(BaseModel):
+    title: str
+    scope: Optional[str] = None
+    audit_type: Literal['Internal', 'External', 'Compliance', 'Regulatory', 'Financial']
+    target_department: Optional[str] = None
+    auditor_id: Optional[int] = None
+    start_date: str  # ISO format date string
+    end_date: Optional[str] = None  # ISO format date string
+
+class AuditDetailsSchema(BaseModel):
+    observations: Optional[str] = None
+    findings: Optional[str] = None
+    recommendations: Optional[str] = None
+
+class AuditFindingSchema(BaseModel):
+    description: str
+    severity: Literal['Low', 'Medium', 'High', 'Critical']
+    category: Optional[str] = None
+    corrective_action: Optional[str] = None
+
+class AuditSubmitSchema(BaseModel):
+    audit_id: int
+    observations: Optional[str] = None
+    findings: Optional[str] = None
+    recommendations: Optional[str] = None
+    signature: str  # Base64 encoded signature
+    signed_date: str  # ISO format date string
+    auditor_name: str
+
 class FeedbackCreateSchema(BaseModel):
     audit_id: int
     feedback: str
+
+
+
+class ClientCreateSchema(BaseModel):
+    company_name: str
+    timezone: str = "UTC"
+    logo_url: str | None = None
+
+class ClientEditSchema(BaseModel):
+    company_name: str | None = None
+    timezone: str | None = None
+    logo_url: str | None = None
+
+class ClientResponseSchema(BaseModel):
+    id: int
+    company_name: str
+    timezone: str | None = None
+    logo_url: str | None = None
+    
+    class Config:
+        from_attributes = True
+
+class ClientListResponseSchema(BaseModel):
+    clients: list[ClientResponseSchema]
+    total_count: int
+    filtered_by: dict | None = None
+
+
+
+class DocumentTypeEnum(str, Enum):
+    standard_operating_procedure = "Standard Operating Procedure"
+    policy = "Policy"
+    manual = "Manual"
+    specification = "Specification"
+    report = "Report"
+    form = "Form"
+    protocol = "Protocol"
+    certificate = "Certificate"
+    
+    @classmethod
+    def from_string(cls, value: str):
+        """Convert string to enum, handling different formats"""
+        # Try exact match first
+        try:
+            return cls(value)
+        except ValueError:
+            pass
+        
+        # Try case-insensitive match
+        for member in cls:
+            if member.value.lower() == value.lower():
+                return member
+        
+        # Try mapping common variations
+        mapping = {
+            "sop": cls.standard_operating_procedure,
+            "standard operating procedure": cls.standard_operating_procedure,
+            "standard_operating_procedure": cls.standard_operating_procedure,
+            "pol": cls.policy,
+            "man": cls.manual,
+            "spec": cls.specification,
+            "rep": cls.report,
+            "frm": cls.form,
+            "prot": cls.protocol,
+            "cert": cls.certificate
+        }
+        
+        if value.lower() in mapping:
+            return mapping[value.lower()]
+        
+        raise ValueError(f"Invalid document type: {value}")
+
+class DocumentStatusEnum(str, Enum):
+    draft = "draft"
+    under_review = "under_review"
+    under_approval = "under_approval"
+    approved = "approved"
+    rejected = "rejected"
+    archived = "archived"
+
+class DocumentCreateSchema(BaseModel):
+    title: str
+    document_type: DocumentTypeEnum
+    content: str | None = None
+
+class DocumentResponseSchema(BaseModel):
+    id: int
+    title: str
+    document_type: str
+    file_name: str
+    file_size: int | None = None
+    version: str
+    status: str
+    content: str | None = None
+    uploaded_by: int
+    uploader_name: str | None = None
+    assigned_approver_id: int | None = None
+    assigned_approver_name: str | None = None
+    approved_by: int | None = None
+    approver_name: str | None = None
+    approved_at: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    
+    class Config:
+        from_attributes = True
+
+class DocumentListResponseSchema(BaseModel):
+    documents: list[DocumentResponseSchema]
+    total_count: int
+    filtered_by: dict | None = None
+
+class DocumentReviewSchema(BaseModel):
+    document_id: int
+    signature: str  # Base64 encoded signature
+    reviewer_id: int | None = None  # Optional: specific reviewer to assign
+
+class DocumentApproverSchema(BaseModel):
+    document_id: int
+    signature: str  # Base64 encoded signature
+    approver_id: int  # Required: specific approver to assign
+
+class DocumentReviewActionSchema(BaseModel):
+    document_id: int
+    signature: str  # Base64 encoded signature
+    action: str  # "review" or "reject" (case-insensitive)
+    comments: str | None = None
+
+class DocumentApprovalSchema(BaseModel):
+    document_id: int
+    signature: str  # Base64 encoded signature
+    approved: bool  # True for approve, False for reject
+    comments: str | None = None
+
+# Training Management Schemas
+class TrainingCreateSchema(BaseModel):
+    title: str
+    course_code: str
+    description: str | None = None
+    trainer_id: int
+    duration_hours: int | None = None
+    passing_score: int
+    start_date: str  # ISO format date string
+    end_date: str  # ISO format date string
+    content_type: str  # "document" or "video"
+    approved_document_id: int | None = None  # ID of approved document when content_type is "document"
+    mandatory: bool = False
+
+class TrainingCreateWithFileSchema(BaseModel):
+    title: str
+    course_code: str
+    description: str | None = None
+    trainer_id: int
+    duration_hours: int | None = None
+    passing_score: int
+    start_date: str  # ISO format date string
+    end_date: str  # ISO format date string
+    content_type: str  # "document" or "video"
+    approved_document_id: int | None = None  # ID of approved document when content_type is "document"
+    mandatory: bool = False
+    file_path: str | None = None
+    file_name: str | None = None
+    file_size: int | None = None
+    file_type: str | None = None
+    file_base64: str | None = None
+
+class TrainingResponseSchema(BaseModel):
+    id: int
+    title: str
+    course_code: str | None = None
+    description: str | None = None
+    trainer_id: int
+    trainer_name: str | None = None
+    trainer_email: str | None = None
+    duration_hours: int | None = None
+    passing_score: int | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    mandatory: bool | None = None
+    status: str
+    created_by: int
+    creator_name: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    # File upload fields
+    content_type: str | None = None
+    file_name: str | None = None
+    file_size: int | None = None
+    file_type: str | None = None
+    
+    class Config:
+        from_attributes = True
+
+class TrainingListResponseSchema(BaseModel):
+    trainings: list[TrainingResponseSchema]
+    total_count: int
+    filtered_by: dict | None = None
+
+class TrainerResponseSchema(BaseModel):
+    id: int
+    full_name: str
+    email: str
+    department_name: str | None = None
+    
+    class Config:
+        from_attributes = True
+
+# Training Assignment Schemas
+class TrainingAssignmentCreateSchema(BaseModel):
+    training_ids: list[int]  # List of training IDs to assign
+    employee_ids: list[int]  # List of employee IDs to assign to
+    due_date: str | None = None  # ISO format date string
+    notes: str | None = None
+
+class TrainingAssignmentResponseSchema(BaseModel):
+    id: int
+    training_id: int
+    training_title: str | None = None
+    training_type: str | None = None
+    employee_id: int
+    employee_name: str | None = None
+    employee_email: str | None = None
+    department_name: str | None = None
+    assigned_by: int
+    assigned_by_name: str | None = None
+    assigned_date: str
+    due_date: str | None = None
+    completion_date: str | None = None
+    status: str
+    notes: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    
+    class Config:
+        from_attributes = True
+
+class TrainingAssignmentListResponseSchema(BaseModel):
+    assignments: list[TrainingAssignmentResponseSchema]
+    total_count: int
+    filtered_by: dict | None = None
+
+class EmployeeForAssignmentSchema(BaseModel):
+    id: int
+    full_name: str
+    email: str
+    department_name: str
+    role: str
+    emp_id: str  # Display ID for the UI
+    
+    class Config:
+        from_attributes = True
+
+class EmployeeListForAssignmentSchema(BaseModel):
+    employees: list[EmployeeForAssignmentSchema]
+    total_count: int
+    filtered_by: dict | None = None
+
+# Work Order Workflow Schemas
+class WorkOrderWorkflowSchema(BaseModel):
+    work_order_id: int
+    action: str  # start, pause, resume, complete, cancel
+    comments: Optional[str] = None
+    assigned_to: Optional[int] = None
+
+class WorkOrderTaskWorkflowSchema(BaseModel):
+    task_id: int
+    action: str  # start, complete, skip, fail
+    comments: Optional[str] = None
+    actual_hours: Optional[float] = None
+
+class WorkOrderAssignmentSchema(BaseModel):
+    work_order_id: int
+    assigned_to: int
+    reason: Optional[str] = None
+
+# Workflow Management Schemas
+class WorkflowNodeSchema(BaseModel):
+    id: str
+    type: str  # start, internal_actor, external_actor, condition, end
+    title: str
+    position_x: float
+    position_y: float
+    configuration: Optional[Dict[str, Any]] = None
+    status: str = "not_started"  # not_started, in_progress, completed, failed
+
+class WorkflowConnectionSchema(BaseModel):
+    id: str
+    from_node_id: str
+    to_node_id: str
+    condition: Optional[str] = None
+
+class WorkflowSchema(BaseModel):
+    id: Optional[str] = None
+    name: str
+    description: Optional[str] = None
+    nodes: List[WorkflowNodeSchema]
+    connections: List[WorkflowConnectionSchema]
+    status: str = "draft"  # draft, active, inactive
+
+class InternalActorConfigSchema(BaseModel):
+    node_id: str
+    title: str
+    role_type: str  # e.g., "Reviewer", "Approver", "Auditor"
+    employee_id: Optional[int] = None  # If assigned to specific employee
+    instructions: Optional[str] = None
+    deadline: Optional[str] = None  # ISO date string
+    auto_update_role: bool = True  # Whether to update employee's actual role
+
+class WorkflowRoleUpdateSchema(BaseModel):
+    workflow_id: str
+    node_id: str
+    employee_id: int
+    new_role: str  # The role to assign in the workflow
+    update_actual_role: bool = True  # Whether to update employee's actual role in system
+
+class WorkflowRoleChangeSchema(BaseModel):
+    workflow_id: str
+    node_id: str
+    old_role: str
+    new_role: str
+
+class BulkRoleUpdateSchema(BaseModel):
+    workflow_id: str
+    role_mappings: List[Dict[str, str]]  # [{"old_role": "Employee", "new_role": "Approver"}]
+
+# Assessment Schemas
+class DifficultyLevelEnum(str, Enum):
+    easy = "Easy"
+    medium = "Medium"
+    hard = "Hard"
+
+class AssessmentQuestionCreateSchema(BaseModel):
+    training_id: int
+    question_text: str
+    option_a: str
+    option_b: str
+    option_c: str
+    option_d: str
+    correct_option: str  # "A", "B", "C", or "D"
+    difficulty_level: DifficultyLevelEnum
+
+class AssessmentQuestionResponseSchema(BaseModel):
+    id: int
+    training_id: int
+    question_text: str
+    option_a: str
+    option_b: str
+    option_c: str
+    option_d: str
+    correct_option: str
+    difficulty_level: str
+    created_at: str | None = None
+    updated_at: str | None = None
+    
+    class Config:
+        from_attributes = True
+
+class AssessmentQuestionListResponseSchema(BaseModel):
+    questions: list[AssessmentQuestionResponseSchema]
+    total_count: int
+
+class AssessmentSubmissionSchema(BaseModel):
+    training_id: int
+    answers: List[Dict[str, str]]  # [{"question_id": 1, "selected_option": "A"}]
+
+class CertificateResponseSchema(BaseModel):
+    certificate_id: str
+    employee_name: str
+    employee_email: str
+    course_title: str
+    course_code: str
+    completion_date: str
+    score: str
+    passed: bool
+    filename: str
+    pdf_base64: str
+    message: str
+
+class EmployeeTrainingStatisticsSchema(BaseModel):
+    assigned_courses: int
+    completed_courses: int
+    in_progress_courses: int
+    certificates: int
+    total_courses: int
+
+# Training Assignment Modal Schemas
+class TrainingAssignmentModalSchema(BaseModel):
+    training_id: int
+    assignment_date: str  # ISO format date string
+    difficulty_level: str  # "Easy", "Medium", "Hard"
+    initial_status: str  # "Assigned", "In Progress", etc.
+    employee_ids: list[int]  # List of selected employee IDs
+    notes: str | None = None
+
+class UserForAssignmentSchema(BaseModel):
+    id: int
+    full_name: str
+    email: str
+    role: str
+    department_name: str | None = None
+    
+    class Config:
+        from_attributes = True
+
+class UserAssignmentListSchema(BaseModel):
+    users: list[UserForAssignmentSchema]
+    total_count: int
+
+# Company Training Assignment Schemas
+class CompanyTrainingAssignmentCreateSchema(BaseModel):
+    company_id: int
+    training_ids: list[int]  # List of training IDs to assign
+    due_date: str | None = None  # ISO format date string (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS). Leave empty or null if no due date.
+    notes: str | None = None
+    
+    @field_validator('due_date')
+    @classmethod
+    def validate_due_date(cls, v):
+        if v is None or v == "":
+            return None
+        if v.lower() == "string":
+            return None
+        try:
+            # Try to parse as ISO format
+            from datetime import datetime
+            datetime.fromisoformat(v)
+            return v
+        except ValueError:
+            raise ValueError('due_date must be a valid ISO format date string (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)')
+
+class CompanyTrainingAssignmentResponseSchema(BaseModel):
+    id: int
+    company_id: int
+    company_name: str | None = None
+    training_id: int
+    training_title: str | None = None
+    training_code: str | None = None
+    training_type: str | None = None
+    duration_hours: int | None = None
+    passing_score: int | None = None
+    assigned_by: int
+    assigned_by_name: str | None = None
+    assigned_date: str
+    due_date: str | None = None
+    notes: str | None = None
+    is_active: bool
+    
+    class Config:
+        from_attributes = True
+
+class CompanyTrainingAssignmentListResponseSchema(BaseModel):
+    assignments: list[CompanyTrainingAssignmentResponseSchema]
+    total_count: int
+    filtered_by: dict | None = None
+
+class AvailableTrainingForCompanySchema(BaseModel):
+    id: int
+    title: str
+    course_code: str | None = None
+    description: str | None = None
+    training_type: str | None = None
+    duration_hours: int | None = None
+    passing_score: int | None = None
+    mandatory: bool | None = None
+    status: str | None = None
+    
+    class Config:
+        from_attributes = True
+
+class AvailableTrainingListForCompanySchema(BaseModel):
+    trainings: list[AvailableTrainingForCompanySchema]
+    total_count: int
+    filtered_by: dict | None = None
+
+# Project Management Schemas
+class ProjectCreateSchema(BaseModel):
+    name: str
+    description: str | None = None
+    status: str = "Not Started"
+    start_date: str | None = None  # ISO format date string
+    end_date: str | None = None  # ISO format date string
+    project_manager_id: int
+    department_id: int
+    employee_ids: list[int]  # List of employee IDs to assign
+
+class ProjectEditSchema(BaseModel):
+    name: str | None = None  # Only update if provided, otherwise keep existing
+    description: str | None = None  # Only update if provided, otherwise keep existing
+    status: str | None = None  # Only update if provided, otherwise keep existing
+    start_date: str | None = None  # ISO format date string - only update if provided, otherwise keep existing
+    end_date: str | None = None  # ISO format date string - only update if provided, otherwise keep existing
+    project_manager_id: int | None = None  # Only update if provided, otherwise keep existing
+    department_id: int | None = None  # Only update if provided, otherwise keep existing
+
+class ProjectResponseSchema(BaseModel):
+    id: int
+    name: str
+    description: str | None = None
+    status: str
+    start_date: str | None = None
+    end_date: str | None = None
+    project_manager_id: int
+    project_manager_name: str | None = None
+    department_id: int
+    department_name: str | None = None
+    created_by: int
+    created_at: str | None = None
+    updated_at: str | None = None
+    is_active: bool
+    
+    class Config:
+        from_attributes = True
+
+class ProjectListResponseSchema(BaseModel):
+    projects: list[ProjectResponseSchema]
+    total_count: int
+    filtered_by: dict | None = None
+
+class ProjectEmployeeAssignmentSchema(BaseModel):
+    id: int
+    project_id: int
+    project_name: str | None = None
+    employee_id: int
+    employee_name: str | None = None
+    employee_email: str | None = None
+    department_name: str | None = None
+    assigned_by: int
+    assigned_by_name: str | None = None
+    assigned_date: str
+    is_active: bool
+    
+    class Config:
+        from_attributes = True
+
+class EmployeeForProjectSchema(BaseModel):
+    id: int
+    full_name: str
+    email: str
+    department_name: str | None = None
+    role: str | None = None
+    
+    class Config:
+        from_attributes = True
+
+class EmployeeListForProjectSchema(BaseModel):
+    employees: list[EmployeeForProjectSchema]
+    total_count: int
+
+class DocumentReviewHistorySchema(BaseModel):
+    id: int
+    document_id: int
+    reviewer_id: int | None = None
+    reviewer_name: str | None = None
+    action: str
+    signature: str | None = None
+    comments: str | None = None
+    created_at: str
+    
+    class Config:
+        from_attributes = True
+
+class DocumentTraceabilitySchema(BaseModel):
+    document_id: int
+    current_status: str
+    review_history: list[DocumentReviewHistorySchema]
+    total_reviews: int
+    last_action: str | None = None
+    last_action_date: str | None = None
+
+class DocumentPreviewSchema(BaseModel):
+    document_id: int
+    title: str
+    document_number: str
+    document_type: str
+    file_name: str
+    file_size: int
+    file_size_formatted: str  # e.g., "171 KB"
+    created_date: str
+    status: str
+    content: str | None = None
+    file_path: str | None = None
+    # Document metadata
+    uploaded_by: int
+    uploader_name: str | None = None
+    approved_by: int | None = None
+    approver_name: str | None = None
+    approved_at: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+    version: str | None = None
+    
+    class Config:
+        from_attributes = True
+
+class DocumentViewResponseSchema(BaseModel):
+    document: DocumentPreviewSchema
+    traceability: DocumentTraceabilitySchema
+    can_edit: bool
+    can_review: bool
+    can_approve: bool
+    can_delete: bool
+    current_user_role: str
+
+class DocumentCommentSchema(BaseModel):
+    id: int
+    document_id: int
+    user_id: int
+    user_name: str
+    comment: str
+    created_at: str
+    
+    class Config:
+        from_attributes = True
+
+class DocumentCommentCreateSchema(BaseModel):
+    document_id: int
+    comment: str
+
+class DocumentCommentListSchema(BaseModel):
+    comments: list[DocumentCommentSchema]
+    total_count: int
+
+class DocumentViewSchema(BaseModel):
+    id: int
+    viewer_id: int
+    viewer_name: str
+    viewer_role: str
+    viewed_at: str
+
+    class Config:
+        from_attributes = True
+
+

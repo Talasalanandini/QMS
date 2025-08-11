@@ -1,10 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from services.profileservice import get_profile, update_profile, change_password, save_signature, upload_avatar
-from schemas import ProfileUpdateSchema, PasswordChangeSchema, SignatureSchema
-from typing import Optional
-from pydantic import BaseModel, EmailStr
-from fastapi import APIRouter, HTTPException
-from schemas import FirstPasswordResetSchema
+from schemas import ProfileUpdateSchema, PasswordChangeSchema, SignatureSchema, FirstPasswordResetSchema
 from db.database import SessionLocal
 from models import Employee, Token
 from passlib.hash import bcrypt
@@ -49,7 +45,8 @@ def save_e_signature(signature_data: SignatureSchema):
 
 @router.post("/upload-avatar")
 def upload_avatar_api(file: UploadFile = File(...)):
-    return upload_avatar(file)
+    # Remove current_user dependency, call upload_avatar with only file
+    return upload_avatar(file, None)
 
 @router.post("/first-reset-password")
 def first_reset_password(data: FirstPasswordResetSchema):
