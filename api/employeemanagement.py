@@ -73,6 +73,16 @@ def employee_auth(request: Request):
     finally:
         session.close()
 
+def admin_or_employee_auth(request: Request):
+    """Authentication that allows both admins and employees"""
+    employee = get_current_user(request)
+    session: Session = SessionLocal()
+    try:
+        # Allow access for all roles including Admin
+        return employee
+    finally:
+        session.close()
+
 @router.post('/employees')
 def create_employee_api(employee: EmployeeCreate, current_user: Employee = Depends(admin_auth)):
     try:
@@ -90,7 +100,7 @@ def get_all_employees(
 ):
     session: Session = SessionLocal()
     try:
-        query = session.query(Employee).join(Role, Employee.role_id == Role.id).join(Department, Employee.department_id == Department.id)
+        query = session.query(Employee).join(Role, Employee.role_id == Role.id).join(Department, Employee.department_id == Department.id).filter(Employee.deleted_at.is_(None))
         if role:
             query = query.filter(Role.name == role)
         if department:
@@ -116,7 +126,7 @@ def get_all_employees(
 def get_employee_count(current_user: Employee = Depends(admin_auth)):
     session: Session = SessionLocal()
     try:
-        count = session.query(Employee).count()
+        count = session.query(Employee).filter(Employee.deleted_at.is_(None)).count()
         return {"count": count}
     finally:
         session.close()
@@ -485,7 +495,7 @@ def get_employee_certificates(current_user: Employee = Depends(employee_auth)):
 def get_employee(employee_id: int, current_user: Employee = Depends(admin_auth)):
     session: Session = SessionLocal()
     try:
-        employee = session.query(Employee).filter(Employee.id == employee_id).first()
+        employee = session.query(Employee).filter(Employee.id == employee_id, Employee.deleted_at.is_(None)).first()
         if not employee:
             raise HTTPException(status_code=404, detail="Employee not found")
         return employee
@@ -496,7 +506,7 @@ def get_employee(employee_id: int, current_user: Employee = Depends(admin_auth))
 def update_employee(employee_id: int, employee_update: EmployeeCreate, current_user: Employee = Depends(admin_auth)):
     session: Session = SessionLocal()
     try:
-        employee = session.query(Employee).filter(Employee.id == employee_id).first()
+        employee = session.query(Employee).filter(Employee.id == employee_id, Employee.deleted_at.is_(None)).first()
         if not employee:
             raise HTTPException(status_code=404, detail="Employee not found")
         # Update fields
@@ -513,7 +523,44 @@ def update_employee(employee_id: int, employee_update: EmployeeCreate, current_u
 
 #-----Employeee-----#
 
-
-
-
+@router.delete('/employees/{employee_id}', summary="Delete employee")
+def delete_employee(employee_id: int, current_user: Employee = Depends(admin_auth)):
+    """Soft delete an employee by setting deleted_at timestamp"""
+    session: Session = SessionLocal()
+    try:
+        # Check if employee exists
+        employee = session.query(Employee).filter(Employee.id == employee_id).first()
+        if not employee:
+            raise HTTPException(status_code=404, detail="Employee not found")
+        
+        # Check if trying to delete self
+        if employee.id == current_user.id:
+            raise HTTPException(status_code=400, detail="Cannot delete your own account")
+        
+        # Check if employee is the last admin
+        if employee.role_obj.name == "Admin":
+            admin_count = session.query(Employee).join(Role, Employee.role_id == Role.id).filter(
+                Role.name == "Admin",
+                Employee.deleted_at.is_(None)
+            ).count()
+            if admin_count <= 1:
+                raise HTTPException(status_code=400, detail="Cannot delete the last admin user")
+        
+        # Soft delete by setting deleted_at timestamp
+        employee.deleted_at = datetime.datetime.utcnow()
+        session.commit()
+        
+        return {
+            "message": f"Employee '{employee.full_name}' has been deleted successfully",
+            "employee_id": employee.id,
+            "deleted_at": employee.deleted_at.isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete employee: {str(e)}")
+    finally:
+        session.close()
 

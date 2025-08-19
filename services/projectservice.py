@@ -397,6 +397,7 @@ def get_projects_timeline():
 
 def get_projects_timeline_by_view(view_type: str = "month"):
     """Return timeline data formatted for specific view types: day, week, or month"""
+    print(f"DEBUG: Received view_type: '{view_type}'")  # Debug log
     session = SessionLocal()
     try:
         projects = session.query(Project).filter(Project.is_active == True).all()
@@ -431,20 +432,34 @@ def get_projects_timeline_by_view(view_type: str = "month"):
             today_index = min(max((today - start).days, 0), total_days)
             today_position_percent = round(min(max((today_index / total_days) * 100, 0), 100), 2)
             
+            # Calculate timeline view positioning
+            timeline_view_info = calculate_timeline_view_position(start, end, today, view_type)
+            
+            print(f"DEBUG: Processing view_type: '{view_type}' for project {p.name}")  # Debug log
+            
             # Format dates based on view type
             if view_type == "day":
+                print(f"DEBUG: Using DAY view for {p.name}")  # Debug log
                 start_formatted = start.strftime("%a, %d")  # "Wed, 06"
                 end_formatted = end.strftime("%a, %d")      # "Thu, 13"
                 duration_text = f"{total_days} days"
                 timeline_units = generate_day_timeline(start, end)
                 
             elif view_type == "week":
+                print(f"DEBUG: Using WEEK view for {p.name}")  # Debug log
                 start_formatted = start.strftime("%a, %d %b")  # "Wed, 06 Aug"
                 end_formatted = end.strftime("%a, %d %b")      # "Thu, 13 Nov"
                 duration_text = f"{total_days // 7} weeks, {total_days % 7} days"
                 timeline_units = generate_week_timeline(start, end)
                 
-            else:  # month view (default)
+            elif view_type == "month":
+                print(f"DEBUG: Using MONTH view for {p.name}")  # Debug log
+                start_formatted = start.strftime("%b %Y")  # "Aug 2025"
+                end_formatted = end.strftime("%b %Y")      # "Nov 2025"
+                duration_text = f"{((end.year - start.year) * 12 + end.month - start.month)} months"
+                timeline_units = generate_month_timeline(start, end)
+            else:
+                print(f"DEBUG: Unknown view_type '{view_type}', defaulting to month view for {p.name}")  # Debug log
                 start_formatted = start.strftime("%b %Y")  # "Aug 2025"
                 end_formatted = end.strftime("%b %Y")      # "Nov 2025"
                 duration_text = f"{((end.year - start.year) * 12 + end.month - start.month)} months"
@@ -467,12 +482,77 @@ def get_projects_timeline_by_view(view_type: str = "month"):
                 "status": status,
                 "duration_text": duration_text,
                 "timeline_units": timeline_units,
+                "timeline_view_info": timeline_view_info,
                 "project_manager_name": p.project_manager.full_name if p.project_manager else None,
                 "department_name": p.department.name if p.department else None,
             })
         return items
     finally:
         session.close()
+
+def calculate_timeline_view_position(start_date: datetime.date, end_date: datetime.date, today: datetime.date, view_type: str):
+    """Calculate optimal timeline view position to center on today's date when project is active"""
+    if not (start_date <= today <= end_date):
+        return {
+            "should_center": False,
+            "center_position": 0,
+            "visible_range_start": 0,
+            "visible_range_end": 0
+        }
+    
+    if view_type == "day":
+        total_days = (end_date - start_date).days + 1
+        today_offset = (today - start_date).days
+        center_position = today_offset / total_days
+        
+        # Show 30 days around today
+        visible_days = 30
+        start_offset = max(0, today_offset - visible_days // 2)
+        end_offset = min(total_days - 1, today_offset + visible_days // 2)
+        
+        return {
+            "should_center": True,
+            "center_position": round(center_position * 100, 2),
+            "visible_range_start": start_offset,
+            "visible_range_end": end_offset,
+            "visible_days": visible_days
+        }
+        
+    elif view_type == "week":
+        total_weeks = ((end_date - start_date).days + 6) // 7
+        today_week = (today - start_date).days // 7
+        center_position = today_week / total_weeks if total_weeks > 0 else 0
+        
+        # Show 8 weeks around today
+        visible_weeks = 8
+        start_week = max(0, today_week - visible_weeks // 2)
+        end_week = min(total_weeks - 1, today_week + visible_weeks // 2)
+        
+        return {
+            "should_center": True,
+            "center_position": round(center_position * 100, 2),
+            "visible_range_start": start_week,
+            "visible_range_end": end_week,
+            "visible_weeks": visible_weeks
+        }
+        
+    else:  # month view
+        total_months = (end_date.year - start_date.year) * 12 + end_date.month - start_date.month + 1
+        today_month = (today.year - start_date.year) * 12 + today.month - start_date.month
+        center_position = today_month / total_months if total_months > 0 else 0
+        
+        # Show 6 months around today
+        visible_months = 6
+        start_month = max(0, today_month - visible_months // 2)
+        end_month = min(total_months - 1, today_month + visible_months // 2)
+        
+        return {
+            "should_center": True,
+            "center_position": round(center_position * 100, 2),
+            "visible_range_start": start_month,
+            "visible_range_end": end_month,
+            "visible_months": visible_months
+        }
 
 def generate_day_timeline(start_date: datetime.date, end_date: datetime.date):
     """Generate day-level timeline units for Gantt chart"""
@@ -491,39 +571,93 @@ def generate_day_timeline(start_date: datetime.date, end_date: datetime.date):
 def generate_week_timeline(start_date: datetime.date, end_date: datetime.date):
     """Generate week-level timeline units for Gantt chart"""
     timeline = []
-    current = start_date
-    while current <= end_date:
-        # Get the start of the week (Monday)
-        week_start = current - datetime.timedelta(days=current.weekday())
-        week_end = week_start + datetime.timedelta(days=6)
+    
+    # Start from the beginning of the week containing the start date
+    current = start_date - datetime.timedelta(days=start_date.weekday())
+    
+    # End at the end of the week containing the end date
+    end_week = end_date + datetime.timedelta(days=6 - end_date.weekday())
+    
+    while current <= end_week:
+        week_start = current
+        week_end = current + datetime.timedelta(days=6)
         
-        # Only add if this week overlaps with our project
+        # Check if this week overlaps with the project
         if week_end >= start_date and week_start <= end_date:
+            # Calculate how much of this week the project covers
+            week_project_start = max(week_start, start_date)
+            week_project_end = min(week_end, end_date)
+            
+            # Calculate the percentage of the week covered by the project
+            week_days = 7
+            project_days_in_week = (week_project_end - week_project_start).days + 1
+            coverage_percentage = (project_days_in_week / week_days) * 100
+            
             timeline.append({
                 "week_start": week_start.isoformat(),
                 "week_end": week_end.isoformat(),
-                "formatted": f"{week_start.strftime('%d %b')} - {week_end.strftime('%d %b')}"
+                "formatted": f"{week_start.strftime('%d %b')} - {week_end.strftime('%d %b')}",
+                "project_start_in_week": week_project_start.isoformat(),
+                "project_end_in_week": week_project_end.isoformat(),
+                "coverage_percentage": round(coverage_percentage, 2),
+                "is_full_week": week_project_start == week_start and week_project_end == week_end,
+                "is_partial_start": week_project_start > week_start,
+                "is_partial_end": week_project_end < week_end
             })
         
         current += datetime.timedelta(days=7)
+    
     return timeline
 
 def generate_month_timeline(start_date: datetime.date, end_date: datetime.date):
     """Generate month-level timeline units for Gantt chart"""
     timeline = []
-    current = start_date.replace(day=1)  # Start of month
     
-    while current <= end_date:
-        timeline.append({
-            "month": current.strftime("%B"),
-            "year": current.year,
-            "formatted": current.strftime("%b %Y")
-        })
-        
-        # Move to next month
+    # Start from the beginning of the month containing the start date
+    current = start_date.replace(day=1)
+    
+    # End at the end of the month containing the end date
+    end_month = end_date.replace(day=1)
+    if end_date.month == 12:
+        end_month = end_month.replace(year=end_month.year + 1, month=1)
+    else:
+        end_month = end_month.replace(month=end_month.month + 1)
+    
+    while current < end_month:
+        # Calculate the month span
+        month_start = current
         if current.month == 12:
-            current = current.replace(year=current.year + 1, month=1)
+            month_end = current.replace(year=current.year + 1, month=1) - datetime.timedelta(days=1)
+            next_month = current.replace(year=current.year + 1, month=1)
         else:
-            current = current.replace(month=current.month + 1)
+            month_end = current.replace(month=current.month + 1) - datetime.timedelta(days=1)
+            next_month = current.replace(month=current.month + 1)
+        
+        # Check if this month overlaps with the project
+        if month_end >= start_date and month_start <= end_date:
+            # Calculate how much of this month the project covers
+            month_project_start = max(month_start, start_date)
+            month_project_end = min(month_end, end_date)
+            
+            # Calculate the percentage of the month covered by the project
+            month_days = (month_end - month_start).days + 1
+            project_days_in_month = (month_project_end - month_project_start).days + 1
+            coverage_percentage = (project_days_in_month / month_days) * 100
+            
+            timeline.append({
+                "month": current.strftime("%B"),
+                "year": current.year,
+                "formatted": current.strftime("%b %Y"),
+                "month_start": month_start.isoformat(),
+                "month_end": month_end.isoformat(),
+                "project_start_in_month": month_project_start.isoformat(),
+                "project_end_in_month": month_project_end.isoformat(),
+                "coverage_percentage": round(coverage_percentage, 2),
+                "is_full_month": month_project_start == month_start and month_project_end == month_end,
+                "is_partial_start": month_project_start > month_start,
+                "is_partial_end": month_project_end < month_end
+            })
+        
+        current = next_month
     
     return timeline

@@ -608,29 +608,140 @@ class AssessmentQuestion(Base):
 
 class AssessmentSubmission(Base):
     __tablename__ = 'assessment_submissions'
-    
     id = Column(Integer, primary_key=True, index=True)
     training_id = Column(Integer, ForeignKey('trainings.id'), nullable=False)
     employee_id = Column(Integer, ForeignKey('employees.id'), nullable=False)
-    score = Column(Integer, nullable=True)  # Percentage score
-    total_questions = Column(Integer, nullable=False)
-    correct_answers = Column(Integer, nullable=False)
-    passed = Column(Boolean, nullable=False)  # True if score >= passing_score
+    score = Column(Integer, nullable=True)
+    passed = Column(Boolean, default=False)
     submitted_at = Column(DateTime, default=datetime.datetime.utcnow)
-    
-    # Relationships
-    training = relationship("Training")
-    employee = relationship("Employee")
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    deleted_at = Column(DateTime, nullable=True)
 
-class AssessmentAnswer(Base):
-    __tablename__ = 'assessment_answers'
-    
+# ===== CHANGE CONTROL MODELS =====
+
+class ChangeTypeEnum(str, Enum):
+    document = "document"
+    workflow = "workflow"
+    training = "training"
+
+class ChangeStatusEnum(str, Enum):
+    submitted = "submitted"
+    reviewed = "reviewed"
+    approved = "approved"
+    rejected = "rejected"
+
+class ChangeControl(Base):
+    __tablename__ = 'change_controls'
     id = Column(Integer, primary_key=True, index=True)
-    submission_id = Column(Integer, ForeignKey('assessment_submissions.id'), nullable=False)
-    question_id = Column(Integer, ForeignKey('assessment_questions.id'), nullable=False)
-    selected_option = Column(String, nullable=False)  # "A", "B", "C", or "D"
-    is_correct = Column(Boolean, nullable=False)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=False)
+    change_type = Column(SqlEnum(ChangeTypeEnum), nullable=False)
+    related_document_id = Column(Integer, ForeignKey('documents.id'), nullable=True)
+    reviewer_id = Column(Integer, ForeignKey('employees.id'), nullable=False)
+    approver_id = Column(Integer, ForeignKey('employees.id'), nullable=False)
+    requester_id = Column(Integer, ForeignKey('employees.id'), nullable=False)
+    status = Column(SqlEnum(ChangeStatusEnum), default=ChangeStatusEnum.submitted)
+    review_comments = Column(Text, nullable=True)
+    approval_comments = Column(Text, nullable=True)
+    review_date = Column(DateTime, nullable=True)
+    approval_date = Column(DateTime, nullable=True)
+    implementation_date = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    deleted_at = Column(DateTime, nullable=True)
     
     # Relationships
-    submission = relationship("AssessmentSubmission")
-    question = relationship("AssessmentQuestion")
+    related_document = relationship("Document", foreign_keys=[related_document_id])
+    reviewer = relationship("Employee", foreign_keys=[reviewer_id])
+    approver = relationship("Employee", foreign_keys=[approver_id])
+    requester = relationship("Employee", foreign_keys=[requester_id])
+
+class ChangeControlHistory(Base):
+    __tablename__ = 'change_control_history'
+    id = Column(Integer, primary_key=True, index=True)
+    change_control_id = Column(Integer, ForeignKey('change_controls.id'), nullable=False)
+    action = Column(String, nullable=False)  # e.g., "Submitted", "Reviewed", "Approved", "Rejected"
+    performed_by_id = Column(Integer, ForeignKey('employees.id'), nullable=False)
+    comments = Column(Text, nullable=True)
+    previous_status = Column(SqlEnum(ChangeStatusEnum, values_callable=lambda x: [e.value for e in x]), nullable=True)
+    new_status = Column(SqlEnum(ChangeStatusEnum, values_callable=lambda x: [e.value for e in x]), nullable=True)
+    performed_at = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    # Relationships
+    change_control = relationship("ChangeControl")
+    performed_by = relationship("Employee", foreign_keys=[performed_by_id])
+
+# CAPA Management Models
+class CAPAIssueTypeEnum(str, Enum):
+    deviation = "Deviation"
+    non_conformance = "Non-Conformance"
+    customer_complaint = "Customer Complaint"
+    audit_finding = "Audit Finding"
+    process_improvement = "Process Improvement"
+    quality_issue = "Quality Issue"
+    documentation_error = "Documentation Error"
+
+class CAPAPriorityEnum(str, Enum):
+    low = "Low"
+    medium = "Medium"
+    high = "High"
+    critical = "Critical"
+
+class CAPAStatusEnum(str, Enum):
+    open = "OPEN"
+    in_progress = "IN PROGRESS"
+    pending_verification = "PENDING VERIFICATION"
+    closed = "CLOSED"
+    sent_back = "SENT BACK"
+
+class CAPA(Base):
+    __tablename__ = 'capas'
+    id = Column(Integer, primary_key=True, index=True)
+    capa_code = Column(String, unique=True, nullable=False)  # Auto-generated CAPA-{timestamp}
+    issue_title = Column(String, nullable=False)
+    description = Column(Text, nullable=False)
+    issue_type = Column(SqlEnum(CAPAIssueTypeEnum, values_callable=lambda x: [e.value for e in x]), nullable=False)
+    priority = Column(SqlEnum(CAPAPriorityEnum, values_callable=lambda x: [e.value for e in x]), default=CAPAPriorityEnum.medium)
+    status = Column(SqlEnum(CAPAStatusEnum, values_callable=lambda x: [e.value for e in x]), default=CAPAStatusEnum.open)
+    
+    # Assignment
+    assigned_to = Column(Integer, ForeignKey('employees.id'), nullable=True)
+    assigned_by = Column(Integer, ForeignKey('employees.id'), nullable=False)
+    
+    # Dates
+    created_date = Column(DateTime, default=datetime.datetime.utcnow)
+    due_date = Column(DateTime, nullable=True)
+    started_date = Column(DateTime, nullable=True)  # When marked as in progress
+    completed_date = Column(DateTime, nullable=True)  # When marked as completed
+    closed_date = Column(DateTime, nullable=True)  # When admin marks as closed
+    
+    # Action details
+    action_taken = Column(Text, nullable=True)  # Corrective/preventive actions
+    completion_notes = Column(Text, nullable=True)
+    evidence_files = Column(JSON, nullable=True)  # List of file paths
+    
+    # Metadata
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+    deleted_at = Column(DateTime, nullable=True)
+    
+    # Relationships
+    assignee = relationship("Employee", foreign_keys=[assigned_to])
+    creator = relationship("Employee", foreign_keys=[assigned_by])
+
+class CAPAHistory(Base):
+    __tablename__ = 'capa_history'
+    id = Column(Integer, primary_key=True, index=True)
+    capa_id = Column(Integer, ForeignKey('capas.id'), nullable=False)
+    action = Column(String, nullable=False)  # e.g., "Created", "Assigned", "Started", "Completed", "Closed", "Sent Back", "Reassigned"
+    performed_by_id = Column(Integer, ForeignKey('employees.id'), nullable=False)
+    previous_status = Column(SqlEnum(CAPAStatusEnum, values_callable=lambda x: [e.value for e in x]), nullable=True)
+    new_status = Column(SqlEnum(CAPAStatusEnum, values_callable=lambda x: [e.value for e in x]), nullable=True)
+    comments = Column(Text, nullable=True)
+    data = Column(JSON, nullable=True)  # Additional data like reassignment details
+    performed_at = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    # Relationships
+    capa = relationship("CAPA")
+    performed_by = relationship("Employee", foreign_keys=[performed_by_id])

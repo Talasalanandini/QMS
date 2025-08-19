@@ -64,9 +64,12 @@ def get_filter_options_endpoint():
 @router.get("/timeline", summary="Get projects timeline (Gantt data)")
 def get_projects_timeline_endpoint(view: str = Query("month", description="Timeline view: day, week, or month")):
     """Return Gantt-friendly timeline data with today's position and progress for each project"""
+    print(f"DEBUG API: Received view parameter: '{view}'")  # Debug log
     if view not in ["day", "week", "month"]:
+        print(f"DEBUG API: Invalid view '{view}', raising error")  # Debug log
         raise HTTPException(status_code=400, detail="View must be 'day', 'week', or 'month'")
     
+    print(f"DEBUG API: Calling service with view: '{view}'")  # Debug log
     data = get_projects_timeline_by_view(view)
     return data
 

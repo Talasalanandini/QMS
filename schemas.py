@@ -371,7 +371,6 @@ class EmployeeForAssignmentSchema(BaseModel):
 class EmployeeListForAssignmentSchema(BaseModel):
     employees: list[EmployeeForAssignmentSchema]
     total_count: int
-    filtered_by: dict | None = None
 
 # Work Order Workflow Schemas
 class WorkOrderWorkflowSchema(BaseModel):
@@ -500,6 +499,87 @@ class EmployeeTrainingStatisticsSchema(BaseModel):
     in_progress_courses: int
     certificates: int
     total_courses: int
+
+# ===== CHANGE CONTROL SCHEMAS =====
+
+class ChangeControlCreateSchema(BaseModel):
+    title: str
+    description: str
+    change_type: str  # "Document", "Workflow", "Training" (case-insensitive)
+    related_document_id: Optional[int] = None
+    reviewer_id: int
+    approver_id: int
+    
+    @field_validator('change_type')
+    @classmethod
+    def validate_change_type(cls, v):
+        valid_types = ["Document", "Workflow", "Training"]
+        valid_types_lower = [t.lower() for t in valid_types]
+        
+        if v.lower() not in valid_types_lower:
+            raise ValueError(f"Invalid change_type: '{v}'. Valid values are: {valid_types}")
+        return v
+
+class ChangeControlUpdateSchema(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    change_type: Optional[str] = None
+    related_document_id: Optional[int] = None
+    reviewer_id: Optional[int] = None
+    approver_id: Optional[int] = None
+
+class ChangeControlResponseSchema(BaseModel):
+    id: int
+    title: str
+    description: str
+    change_type: str
+    related_document_id: Optional[int] = None
+    related_document_name: Optional[str] = None
+    reviewer_id: int
+    reviewer_name: str
+    approver_id: int
+    approver_name: str
+    requester_id: int
+    requester_name: str
+    status: str
+    review_comments: Optional[str] = None
+    approval_comments: Optional[str] = None
+    review_date: Optional[str] = None
+    approval_date: Optional[str] = None
+    implementation_date: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+    class Config:
+        from_attributes = True
+
+class ChangeControlListSchema(BaseModel):
+    id: int
+    title: str
+    change_type: str
+    status: str
+    requester_name: str
+    reviewer_name: str
+    approver_name: str
+    created_at: str
+
+    class Config:
+        from_attributes = True
+
+class ChangeControlReviewSchema(BaseModel):
+    action: str  # "approve", "reject"
+    comments: Optional[str] = None
+
+class ChangeControlApprovalSchema(BaseModel):
+    action: str  # "approve", "reject"
+    comments: Optional[str] = None
+
+class ChangeControlFilterSchema(BaseModel):
+    status: Optional[str] = None
+    change_type: Optional[str] = None
+    requester_id: Optional[int] = None
+    reviewer_id: Optional[int] = None
+    approver_id: Optional[int] = None
 
 # Training Assignment Modal Schemas
 class TrainingAssignmentModalSchema(BaseModel):
@@ -747,5 +827,95 @@ class DocumentViewSchema(BaseModel):
 
     class Config:
         from_attributes = True
+
+# CAPA Management Schemas
+class CAPACreateSchema(BaseModel):
+    issue_title: str
+    description: str
+    issue_type: Literal['Deviation', 'Non-Conformance', 'Customer Complaint', 'Audit Finding', 'Process Improvement', 'Quality Issue', 'Documentation Error']
+    priority: Literal['Low', 'Medium', 'High', 'Critical'] = 'Medium'
+    assigned_to: Optional[int] = None  # Employee ID to assign to
+    due_date: Optional[str] = None  # ISO format date string
+
+class CAPAAssignmentSchema(BaseModel):
+    assigned_to: int  # Employee ID to assign to
+
+class CAPAStartWorkSchema(BaseModel):
+    action_taken: str  # Corrective/preventive actions
+    completion_notes: Optional[str] = None
+    evidence_files: Optional[List[str]] = None  # List of file paths
+
+class CAPACompletionSchema(BaseModel):
+    action_taken: Optional[str] = None  # Corrective/preventive actions
+    completion_notes: Optional[str] = None
+    evidence_files: Optional[List[str]] = None  # List of file paths
+    completion_date: Optional[str] = None  # ISO format date string
+
+class CAPAReassignmentSchema(BaseModel):
+    assigned_to: int  # New employee ID to assign to
+    comments: Optional[str] = None
+
+class CAPAResponseSchema(BaseModel):
+    id: int
+    capa_code: str
+    issue_title: str
+    description: str
+    issue_type: str
+    priority: str
+    status: str
+    assigned_to: Optional[int] = None
+    assigned_to_name: Optional[str] = None
+    assigned_by: int
+    assigned_by_name: str
+    created_date: str
+    due_date: Optional[str] = None
+    started_date: Optional[str] = None
+    completed_date: Optional[str] = None
+    closed_date: Optional[str] = None
+    action_taken: Optional[str] = None
+    completion_notes: Optional[str] = None
+    evidence_files: Optional[List[str]] = None
+    created_at: str
+    updated_at: str
+    
+    class Config:
+        from_attributes = True
+
+class CAPAListResponseSchema(BaseModel):
+    capas: list[CAPAResponseSchema]
+    total_count: int
+    filtered_by: dict | None = None
+
+class CAPAHistorySchema(BaseModel):
+    id: int
+    capa_id: int
+    action: str
+    performed_by_id: int
+    performed_by_name: str
+    previous_status: Optional[str] = None
+    new_status: Optional[str] = None
+    comments: Optional[str] = None
+    data: Optional[dict] = None
+    performed_at: str
+    
+    class Config:
+        from_attributes = True
+
+class CAPAHistoryListSchema(BaseModel):
+    history: list[CAPAHistorySchema]
+    total_count: int
+
+class EmployeeForAssignmentSchema(BaseModel):
+    id: int
+    full_name: str
+    email: str
+    role: str
+    
+    class Config:
+        from_attributes = True
+
+class EmployeeListForAssignmentSchema(BaseModel):
+    employees: list[EmployeeForAssignmentSchema]
+    total_count: int
 
 

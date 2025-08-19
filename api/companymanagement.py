@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from schemas import (
     ClientCreateSchema, 
     ClientEditSchema, 
@@ -11,13 +11,30 @@ from schemas import (
 from api.employeemanagement import admin_auth
 from models import Employee
 from services.companyservices import add_company_to_db, get_companies_from_db, get_company_by_id, update_company_in_db
-from services.companytrainingassignmentservice import (
+from services.companyservices import (
     get_available_trainings_for_company, 
     assign_trainings_to_company, 
     get_company_training_assignments,
     get_all_company_training_assignments,
     remove_training_from_company
 )
+from services.changecontrolservice import create_change_control, get_change_control_details
+
+
+def get_current_user():
+    # Dummy user for testing
+    class User:
+        id = 1
+        is_admin = True
+    return User()
+
+def admin_required(current_user=Depends(get_current_user)):
+    if not getattr(current_user, "is_admin", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin privileges required"
+        )
+    return current_user
 
 router = APIRouter(
     prefix="/company",
@@ -146,3 +163,5 @@ def get_dashboard_statistics():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching dashboard statistics: {str(e)}")
+
+

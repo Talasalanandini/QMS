@@ -4,13 +4,17 @@ from dotenv import load_dotenv
 from fastapi.openapi.utils import get_openapi
 from fastapi import APIRouter
 import datetime
-from api.profilemanagemet import router as profile_router
+from api.profilemanagement import router as profile_router
 from api.auditmanagement import router as audit_router
 from api.companymanagement import router as company_router
 from api.documentmanagement import router as document_router
 from api.trainingmanagement import router as training_router
 from api.usermanagement import router as user_router
 from api.projectmanagement import router as project_router
+from api.changemanagement import router as change_router
+from api.activitylogs import router as activity_logs_router
+from api.capamanagement import router as capa_router
+from api.notifications import router as notifications_router
 
 load_dotenv()
 
@@ -58,3 +62,7 @@ app.include_router(company_router)
 app.include_router(document_router)
 app.include_router(training_router)
 app.include_router(project_router)
+app.include_router(change_router)
+app.include_router(activity_logs_router)
+app.include_router(capa_router)
+app.include_router(notifications_router)
